@@ -2,5 +2,6 @@
 
 ```shell
 npm install
-npx tsc gol.ts && npm gol.js 
+npx tsc gol.ts
+node gol.js 
 ```
