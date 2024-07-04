@@ -12,17 +12,25 @@ const init2DArray = <T>(rows: number, cols: number, create_val: () => T): T[][] 
     Array.from({ length: cols }, () => create_val())
   );
 
-const showCells = (cells: Cells): void => {
-  process.stdout.write('\x1Bc');
-  for (let row = 0; row < cells.length; row++) {
-    for (let col = 0; col < cells[row].length; col++) {
-      if (row === cursorRow && col === cursorCol) {
-        process.stdout.write(cells[row][col] === CellState.Alive ? "▓▓" : "░░");
+const showCells = (cells: Cells): string[] => {
+  return cells.map((row, rowIndex) =>
+    row.map((cell, colIndex) => {
+      if (rowIndex === cursorRow && colIndex === cursorCol) {
+        return cell === CellState.Alive ? "▓▓" : "░░";
       } else {
-        process.stdout.write(cells[row][col] === CellState.Alive ? "██" : "  ");
+        return cell === CellState.Alive ? "██" : "  ";
       }
+    }).join('')
+  );
+}
+
+function updateScreen(newBuffer: string[]) {
+  for (let i = 0; i < newBuffer.length; i++) {
+    if (newBuffer[i] !== screenBuffer[i]) {
+      process.stdout.cursorTo(0, i);
+      process.stdout.write(newBuffer[i]);
+      screenBuffer[i] = newBuffer[i];
     }
-    process.stdout.write("\n");
   }
 }
 
@@ -136,16 +144,20 @@ const setupInputHandler = () => {
   });
 }
 
-let cells: Cells = init2DArray<CellState>(process.stdout.rows - 2, process.stdout.columns / 2, () => CellState.Dead);
+const cellRows = Math.floor(process.stdout.rows - 2);
+const cellCols = Math.floor(process.stdout.columns / 2);
+let cells: Cells = init2DArray<CellState>(cellRows, cellCols, () => CellState.Dead);
 let randomize = false;
 let clear = false;
 let paused = false;
 let speed_mult = 1;
 let cursorRow = 0;
 let cursorCol = 0;
+let screenBuffer: string[] = []
 
 const main = () => {
   setupInputHandler();
+  process.stdout.write('\x1Bc'); // Clear screen
 
   // Link: https://conwaylife.com/wiki/Achim%27s_p16
   const shape = [
@@ -164,8 +176,9 @@ const main = () => {
     [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   ]
-  let middleRow = Math.floor((process.stdout.rows - 2) / 2) - Math.floor(shape.length / 2);
-  let middleCol = Math.floor((process.stdout.columns / 2) / 2) - Math.floor(shape[0].length / 2);
+
+  let middleRow = Math.floor(cellRows / 2) - Math.floor(shape.length / 2);
+  let middleCol = Math.floor(cellCols / 2) - Math.floor(shape[0].length / 2);
   for (let row = 0; row < shape.length; row++) {
     for (let col = 0; col < shape[0].length; col++) {
       if (shape[row][col] === 1) {
@@ -174,10 +187,11 @@ const main = () => {
     }
   }
 
+  screenBuffer = new Array(cellRows).fill("");
   let frameCount = 0;
   const gameLoop = () => {
     if (clear) {
-      cells = init2DArray<CellState>(Math.floor(process.stdout.rows - 2), Math.floor(process.stdout.columns / 2), () => CellState.Dead);
+      cells = init2DArray<CellState>(cellRows, cellCols, () => CellState.Dead);
       clear = false;
     }
 
@@ -190,9 +204,13 @@ const main = () => {
       cells = updateCells(cells);
     }
 
-    process.stdout.write('\x1Bc'); // Clear screen
-    showCells(cells);
-    process.stdout.write(`Status: ${paused ? "PAUSED" : "PLAYING"} @ ${speed_mult}x | Cursor: (${cursorCol}, ${cursorRow}) = ${cells[cursorRow][cursorCol] === CellState.Alive ? "alive" : "dead"}\n`)
+    const newBuffer = showCells(cells);
+    updateScreen(newBuffer);
+
+    process.stdout.cursorTo(0, cellRows);
+    process.stdout.clearLine(0);
+    process.stdout.write(`Status: ${paused ? "PAUSED" : "PLAYING"} @ ${speed_mult}x | Cursor: (${cursorCol}, ${cursorRow}) = ${cells[cursorRow][cursorCol] === CellState.Alive ? "alive" : "dead"}\n`);
+
     let controls = [
       ["↑↓←→", "Move"],
       ["SPACE", "Toggle"],
@@ -203,6 +221,7 @@ const main = () => {
       ["ESC", "Exit"]
     ];
     const formattedControls = controls.map(([key, action]) => `${key}:${action}`).join(" | ");
+    process.stdout.clearLine(0);
     process.stdout.write("Controls: " + formattedControls);
 
     frameCount += 1;
